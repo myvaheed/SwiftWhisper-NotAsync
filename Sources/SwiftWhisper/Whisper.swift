@@ -107,6 +107,9 @@ public class Whisper {
 
         let wrappedCompletionHandler: (Result<[Segment], Error>) -> Result<[Segment], Error> = { result in
             self.cleanupCallbacks()
+            self.frameCount = nil
+            self.cancelCallback = nil
+            self.inProgress = false
             return result
         }
 
@@ -153,10 +156,6 @@ public class Whisper {
             delegate?.whisper(self, didCompleteWithSegments: segments)
             return wrappedCompletionHandler(.success(segments))
         }
-
-        frameCount = nil
-        cancelCallback = nil
-        inProgress = false
     }
 
     public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
