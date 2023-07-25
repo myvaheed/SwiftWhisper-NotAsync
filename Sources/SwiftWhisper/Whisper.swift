@@ -101,6 +101,63 @@ public class Whisper {
         unmanagedSelf.release()
         self.unmanagedSelf = nil
     }
+    
+    public func transcribeSync(audioFrames: [Float]) -> Result<[Segment], Error> {
+        prepareCallbacks()
+
+        let wrappedCompletionHandler: (Result<[Segment], Error>) -> Result<[Segment], Error> = { result in
+            self.cleanupCallbacks()
+            return result
+        }
+
+        guard !inProgress else {
+            return wrappedCompletionHandler(.failure(WhisperError.instanceBusy))
+        }
+        guard audioFrames.count > 0 else {
+            return wrappedCompletionHandler(.failure(WhisperError.invalidFrames))
+        }
+
+        inProgress = true
+        frameCount = audioFrames.count
+
+        whisper_full(whisperContext, params.whisperParams, audioFrames, Int32(audioFrames.count))
+
+        let segmentCount = whisper_full_n_segments(whisperContext)
+
+        var segments: [Segment] = []
+        segments.reserveCapacity(Int(segmentCount))
+
+        for index in 0..<segmentCount {
+            guard let text = whisper_full_get_segment_text(self.whisperContext, index) else { continue }
+            let startTime = whisper_full_get_segment_t0(self.whisperContext, index)
+            let endTime = whisper_full_get_segment_t1(self.whisperContext, index)
+
+            segments.append(
+                .init(
+                    startTime: Int(startTime) * 10, // Correct for ms/10
+                    endTime: Int(endTime) * 10,
+                    text: String(Substring(cString: text))
+                )
+            )
+        }
+
+        if let cancelCallback = cancelCallback {
+            // Should cancel callback be called after delegate and completionHandler?
+            cancelCallback()
+
+            let error = WhisperError.cancelled
+
+            delegate?.whisper(self, didErrorWith: error)
+            return wrappedCompletionHandler(.failure(error))
+        } else {
+            delegate?.whisper(self, didCompleteWithSegments: segments)
+            return wrappedCompletionHandler(.success(segments))
+        }
+
+        frameCount = nil
+        cancelCallback = nil
+        inProgress = false
+    }
 
     public func transcribe(audioFrames: [Float], completionHandler: @escaping (Result<[Segment], Error>) -> Void) {
         prepareCallbacks()
