@@ -126,7 +126,6 @@ public class Whisper {
         whisper_full(whisperContext, params.whisperParams, audioFrames, Int32(audioFrames.count))
 
         let segmentCount = whisper_full_n_segments(whisperContext)
-
         var segments: [Segment] = []
         segments.reserveCapacity(Int(segmentCount))
 
